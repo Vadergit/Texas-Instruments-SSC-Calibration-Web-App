@@ -33,5 +33,5 @@
 <p>RAM- und NVM-Programmierung sind in der Simulation gesperrt. Der JSON-Bericht enthält die Messpunkte und die berechneten Koeffizienten.</p>
 <button type="button" id="export" disabled>JSON-Bericht exportieren</button></section>
 </main>
-<script type="module" src="./app.mjs"></script>
+<script type="module">const model=new URLSearchParams(location.search).get('model');if(!model||model==='pga300') import('./pga300.mjs');else import('./app.mjs');</script>
 </html>
