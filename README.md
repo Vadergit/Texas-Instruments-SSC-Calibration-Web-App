@@ -53,3 +53,6 @@ Zusätzlich Gain-Empfehlung, RAM-Ausgangsparameter, DAC-Test, separate Ausgang-/
 
 ### v0.3.2
 OWI corrected from 38400 to 9600 baud per TI §5.18. Bridge v2 required. Fresh CRC validation, stale backup invalidation, write-failure latch, real capture provenance, module cache versioning. 12 mock driver tests pass in JS runtime. No real hardware or firmware build yet.
+
+### v0.3.3
+ESP32-C3 and Arduino Pro Micro Web Serial programmer sketches plus experimental local Windows TI USB2ANY SDK transport. Three additional mocked adapter tests. Details: [PGA300-ADAPTERS](docs/PGA300-ADAPTERS.md). Hardware/SDK and firmware builds are not validated.

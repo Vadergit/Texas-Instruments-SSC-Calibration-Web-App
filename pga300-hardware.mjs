@@ -85,3 +85,6 @@ export function prepareSettings(original,{stage,ratiometric,normalLow,normalHigh
  if(diagEnabled!==undefined){set(68,diagEnabled,1);if(!Number.isInteger(faultDAC)||faultDAC<0||faultDAC>16383)throw Error('Fault-DAC ungültig.');set(74,faultDAC&255,255);set(75,faultDAC>>8,63);set(71,diagMask,247)}
  a[127]=crc8(a.slice(0,127));return a
 }
+
+export const ADAPTER_IDENTITIES=Object.freeze({esp32:'ESP32-C3',promicro:'PRO-MICRO',evm:'TI-USB2ANY'});
+export async function identifyAdapter(transport,selected){const expected=ADAPTER_IDENTITIES[selected];if(!expected)throw Error('Unbekannter Programmer');const actual=await transport.request('INFO');if(actual!==expected)throw Error('Falscher Programmer: '+actual+'; erwartet '+expected+'. Firmware aktualisieren oder Adapterauswahl korrigieren.');return actual}
