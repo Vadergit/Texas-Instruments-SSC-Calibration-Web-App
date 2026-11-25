@@ -30,7 +30,7 @@ export class SerialBridge{
  }
 }
 export class PGA300{
- constructor(transport){this.io=transport;this.active=false;this.backup=null;this.chipCRC=null;this.writeFault=false}
+ constructor(transport){this.io=transport;this.active=false;this.backup=null;this.chipCRC=null;this.writeFault=false;this.testWrites=false}
  async read(page,addr){if(![0,2,5].includes(page)||!Number.isInteger(addr)||addr<0||addr>255)throw Error('Registeradresse ungültig');const v=await this.io.request('R '+hex(page)+' '+hex(addr));if(!/^[0-9A-Fa-f]{2}$/.test(v))throw Error('Ungültige Registerantwort');return parseInt(v,16)}
  async write(page,addr,value){if(![0,2,5].includes(page)||!Number.isInteger(addr)||addr<0||addr>255||!Number.isInteger(value)||value<0||value>255)throw Error('Ungültiger Registerwert');await this.io.request('W '+hex(page)+' '+hex(addr)+' '+hex(value))}
  async connect(){const hello=await this.io.request('HELLO');if(hello!=='PGA300-BRIDGE 2 9600')throw Error('PGA300 Bridge v2 (9600 Baud OWI) erforderlich. Alte Firmware aktualisieren.');await this.io.request('ACT');try{await this.write(0,12,3);this.active=true;if(await this.read(0,12)!==3)throw Error('Keine bestätigte Konfigurationsantwort');return await this.readEEPROM()}catch(e){try{await this.exit()}catch{}this.active=false;this.backup=null;throw e}}
@@ -47,6 +47,7 @@ export class PGA300{
  async stopDAC(){this.require();await this.writeChecked(2,0x67,(await this.read(2,0x67))&8)}
  async waitIdle(addr,mask){for(let i=0;i<100;i++){if(!((await this.read(5,addr))&mask))return;await delay(10)}throw Error('EEPROM Busy Timeout')}
  async programImage(original,desired,confirmation,progress=()=>{}){
+  if(!this.testWrites)throw Error('Testchip-Schreibfreigabe nicht aktiv.');
   this.require();if(this.writeFault)throw Error('Vorheriger Schreibfehler. Kein weiterer Schreibvorgang in dieser Sitzung.');if(confirmation!=='PGA300 TESTCHIP PROGRAMMIEREN')throw Error('Explizite Freigabe fehlt.');
   if(original.length!==128||desired.length!==128||original[69]&1)throw Error('EEPROM gesperrt / ungültig.');
   const allowed=new Set([...Object.values(COEFF).flatMap(a=>[a,a+1]),32,33,34,35,36,37,40,42,43,44,45,46,47,48,49,50,51,52,53,68,70,71,74,75,76,77,78,79,127]);
@@ -88,3 +89,18 @@ export function prepareSettings(original,{stage,ratiometric,normalLow,normalHigh
 
 export const ADAPTER_IDENTITIES=Object.freeze({esp32:'ESP32-C3',promicro:'PRO-MICRO',evm:'TI-USB2ANY'});
 export async function identifyAdapter(transport,selected){const expected=ADAPTER_IDENTITIES[selected];if(!expected)throw Error('Unbekannter Programmer');const actual=await transport.request('INFO');if(actual!==expected)throw Error('Falscher Programmer: '+actual+'; erwartet '+expected+'. Firmware aktualisieren oder Adapterauswahl korrigieren.');return actual}
+
+export const WRITABLE_MASKS=Object.freeze({...Object.fromEntries(Object.values(COEFF).flatMap(i=>[[i,255],[i+1,255]])),32:1,33:31,34:6,35:159,36:131,37:127,40:1,42:255,43:63,44:255,45:63,46:255,47:63,48:255,49:63,50:255,51:255,52:255,53:255,68:1,70:127,71:247,74:255,75:63,76:255,77:255,78:255,79:255,127:255});
+export function prepareRestore(original,backup){
+ if(original.length!==128||backup.length!==128||crc8(backup.slice(0,127))!==backup[127])throw Error('Nur vollständiges 128-Byte-Backup mit gültiger CRC.');
+ if(original[69]&1)throw Error('EEPROM gesperrt.');
+ // All protected bytes and reserved bits must match, including serial and factory bytes.
+ for(let i=0;i<127;i++)if(((original[i]^backup[i])&~(WRITABLE_MASKS[i]||0))!==0)throw Error('Backup passt nicht zum geschützten Sensorinhalt: 0x'+hex(i));
+ return Uint8Array.from(backup);
+}
+export function registerRows(bytes){
+ if(bytes.length!==128)throw Error('128 Bytes erforderlich.');
+ const names=Object.fromEntries(Object.entries(COEFF).flatMap(([k,i])=>[[i,k+'_LSB'],[i+1,k+'_MSB']]));
+ for(const [i,k] of Object.entries({32:'DAC_CONFIG',33:'OP_STAGE_CTRL',34:'BRDG_CTRL',35:'P_GAIN',36:'T_GAIN',37:'TEMP_CTRL',40:'TEST_CTRL',42:'NORMAL_LOW_LSB',43:'NORMAL_LOW_MSB',44:'NORMAL_HIGH_LSB',45:'NORMAL_HIGH_MSB',46:'LOW_CLAMP_LSB',47:'LOW_CLAMP_MSB',48:'HIGH_CLAMP_LSB',49:'HIGH_CLAMP_MSB',50:'PADC_GAIN_LSB',51:'PADC_GAIN_MSB',52:'PADC_OFFSET_LSB',53:'PADC_OFFSET_MSB',68:'DIAG_ENABLE',69:'EEPROM_LOCK',70:'POWER_DIAG_MASK',71:'AFEDIAG_MASK',74:'DAC_FAULT_LSB',75:'DAC_FAULT_MSB',76:'TADC_GAIN_LSB',77:'TADC_GAIN_MSB',78:'TADC_OFFSET_LSB',79:'TADC_OFFSET_MSB',80:'SERIAL_BYTE0',81:'SERIAL_BYTE1',82:'SERIAL_BYTE2',83:'SERIAL_BYTE3',127:'CRC8'}))names[i]=k;
+ return Array.from(bytes,(v,i)=>({address:hex(i),name:names[i]||'Nicht bearbeitet',value:hex(v),access:WRITABLE_MASKS[i]?'Maske 0x'+hex(WRITABLE_MASKS[i]):'Geschützt'}));
+}
