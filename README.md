@@ -41,3 +41,9 @@ node --test tests/pga300.test.mjs
 Öffnen: http://127.0.0.1:8000/?model=pga300
 
 Für einen Offline-Bedientest: Simulation wählen, 4P4T wählen, AFE bestätigen, Simulationsdaten laden, berechnen, synthetischen Prüfpunkt laden und prüfen, Bericht exportieren. Anschliessend mit echten extern erfassten Daten wiederholen. Die sechs Rechen-Regressionen wurden zusätzlich in einer JavaScript-Laufzeit geprüft. Ein Browser-End-to-End-Test und Hardwaretests stehen aus.
+
+## v0.3.0 – experimenteller Hardwarepfad
+
+Web Serial + ESP32-C3 OWI-Firmware, 128-Byte-EEPROM-Dump und CRC, AFE-RAM-Rücklesung, ADC-Erfassung und linearer Testchip-Schreibpfad mit Backup und Seitenprüfung. Siehe [OWI-Aufbau und Grenzen](docs/PGA300-OWI.md). Die früheren Offline-Grenzen gelten weiterhin für TC/NL-Festkomma, automatische AFE-Optimierung, TI EVM, DAC-Hardwareprüfung und produktive Freigabe. Sechs zusätzliche Hardwaretreiber-Tests verwenden einen simulierten Register-/EEPROM-Transport; keine echte Hardwarevalidierung.
+
+`node --test tests/*.test.mjs`

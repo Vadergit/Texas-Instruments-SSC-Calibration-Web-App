@@ -1,0 +1,16 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {PGA300,crc8,decodeEEPROM,prepareLinear,signed} from '../pga300-hardware.mjs';
+class Fake {
+ constructor(){this.e=new Uint8Array(128);this.e[50]=1;this.e[76]=1;this.e[127]=crc8(this.e.slice(0,127));this.cache=new Uint8Array(8);this.mode=0;this.page=0;this.regs=new Map();this.writes=0;this.corrupt=false}
+ async request(s){const [cmd,...arg]=s.split(' '),[p,a,v]=arg.map(x=>parseInt(x,16));if(cmd==='HELLO')return 'PGA300-BRIDGE 1';if(cmd==='ACT')return '';let x=0;
+ if(cmd==='R'){if(p===0)x=this.mode;else if(p===2)x=this.regs.get(a)||0;else if(p===5){if(a<128)x=this.e[a];else if(a<136)x=this.cache[a-128];else if(a===136)x=this.page;else if(a===140)x=this.e[127]===crc8(this.e.slice(0,127))?2:0;else if(a===141)x=crc8(this.e.slice(0,127))}return x.toString(16).padStart(2,'0')}
+ if(cmd==='W'){if(p===0)this.mode=v;else if(p===2)this.regs.set(a,v);else if(p===5){if(a>=128&&a<136)this.cache[a-128]=v;else if(a===136)this.page=v;else if(a===137){this.writes++;this.e.set(this.cache,this.page*8);if(this.corrupt)this.e[this.page*8]^=1}}return ''}throw Error('unknown command')}
+}
+const candidate={representable:true,h0:400,g0:8192},limits={clow:819,low:1638,high:14745,chigh:15564};
+test('CRC algorithm agrees with independent TI XOR equations for every single input',()=>{const masks=[0xc1,0x43,0x47,0x8e,0x1c,0x38,0x70,0xe0];for(let d=0;d<256;d++){let v=d^255,z=0;for(let i=0;i<8;i++){let a=v&masks[i],parity=0;while(a){parity^=a&1;a>>=1}z|=parity<<i}assert.equal(crc8([d]),z)}});
+test('signed ADC and complete EEPROM',async()=>{const io=new Fake();io.regs.set(0x20,0x00);io.regs.set(0x21,0x80);const d=new PGA300(io);const x=await d.connect();assert.equal(x.bytes.length,128);assert.equal(x.chipCRC.good,true);assert.equal((await d.sample(2)).p,-32768);assert.equal(signed(255,255),-1);await d.exit();assert.equal(io.mode,0)});
+test('linear image, protected serial and readback',async()=>{const io=new Fake();const d=new PGA300(io),x=await d.connect();const a=prepareLinear(x.bytes,candidate,null,limits);assert.equal(decodeEEPROM(a).coefficients.g0,8192);assert.equal(decodeEEPROM(a).normalHigh,14745);const y=await d.programImage(x.bytes,a,'PGA300 TESTCHIP PROGRAMMIEREN');assert.equal(y.chipCRC.good,true);assert.ok(io.writes>0)});
+test('no confirmation, protected byte and changed source all block writing',async()=>{const io=new Fake(),d=new PGA300(io),x=await d.connect(),a=prepareLinear(x.bytes,candidate,null,limits);await assert.rejects(d.programImage(x.bytes,a,'no'));let b=a.slice();b[80]=2;b[127]=crc8(b.slice(0,127));await assert.rejects(d.programImage(x.bytes,b,'PGA300 TESTCHIP PROGRAMMIEREN'));io.e[80]=2;await assert.rejects(d.programImage(x.bytes,a,'PGA300 TESTCHIP PROGRAMMIEREN'));assert.equal(io.writes,0)});
+test('page readback error aborts remaining writes',async()=>{const io=new Fake(),d=new PGA300(io),x=await d.connect(),a=prepareLinear(x.bytes,candidate,null,limits);io.corrupt=true;await assert.rejects(d.programImage(x.bytes,a,'PGA300 TESTCHIP PROGRAMMIEREN'));assert.equal(io.writes,1)});
+test('AFE write/readback',async()=>{const d=new PGA300(new Fake());await d.connect();const a=await d.setAFE({pGain:0x9f,tGain:2,bridge:1,temp:0x43,test:0});assert.equal(a.pGain,0x9f);assert.equal(a.bridge,1);await assert.rejects(d.setAFE({pGain:0x60}))});
