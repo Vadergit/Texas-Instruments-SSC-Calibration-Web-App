@@ -55,7 +55,7 @@ function selectModels(group, requested) {
   updateModel();
 }
 
-model.addEventListener('change', updateModel);
+model.addEventListener('change', () => { if(model.value==='pga300'){const u=new URL(location.href);u.searchParams.set('model','pga300');location.href=u.href;}else updateModel(); });
 get('add').addEventListener('click', () => { appendPoint(); invalidate(); });
 get('remove').addEventListener('click', () => {
   if (body.rows.length > 2) body.deleteRow(-1);
