@@ -47,3 +47,6 @@ Für einen Offline-Bedientest: Simulation wählen, 4P4T wählen, AFE bestätigen
 Web Serial + ESP32-C3 OWI-Firmware, 128-Byte-EEPROM-Dump und CRC, AFE-RAM-Rücklesung, ADC-Erfassung und linearer Testchip-Schreibpfad mit Backup und Seitenprüfung. Siehe [OWI-Aufbau und Grenzen](docs/PGA300-OWI.md). Die früheren Offline-Grenzen gelten weiterhin für TC/NL-Festkomma, automatische AFE-Optimierung, TI EVM, DAC-Hardwareprüfung und produktive Freigabe. Sechs zusätzliche Hardwaretreiber-Tests verwenden einen simulierten Register-/EEPROM-Transport; keine echte Hardwarevalidierung.
 
 `node --test tests/*.test.mjs`
+
+### v0.3.1
+Zusätzlich Gain-Empfehlung, RAM-Ausgangsparameter, DAC-Test, separate Ausgang-/Diagnose-EEPROM-Patches und Intervall-Logging. 9 Hardware-Transporttests + 6 Rechentests in einer JavaScript-Laufzeit erfolgreich. Kein echter Hardware-, Firmware-Build- oder Browser-End-to-End-Test. Siehe aktuelle [OWI-Dokumentation](docs/PGA300-OWI.md); ältere Offline-Beschreibungen dokumentieren den ursprünglichen Stand.
