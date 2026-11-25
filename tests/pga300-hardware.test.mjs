@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {PGA300,crc8,decodeEEPROM,prepareLinear,signed} from '../pga300-hardware.mjs';
+import {PGA300,crc8,decodeEEPROM,prepareLinear,prepareSettings,recommendGain,signed} from '../pga300-hardware.mjs';
 class Fake {
  constructor(){this.e=new Uint8Array(128);this.e[50]=1;this.e[76]=1;this.e[127]=crc8(this.e.slice(0,127));this.cache=new Uint8Array(8);this.mode=0;this.page=0;this.regs=new Map();this.writes=0;this.corrupt=false}
  async request(s){const [cmd,...arg]=s.split(' '),[p,a,v]=arg.map(x=>parseInt(x,16));if(cmd==='HELLO')return 'PGA300-BRIDGE 1';if(cmd==='ACT')return '';let x=0;
@@ -14,3 +14,7 @@ test('linear image, protected serial and readback',async()=>{const io=new Fake()
 test('no confirmation, protected byte and changed source all block writing',async()=>{const io=new Fake(),d=new PGA300(io),x=await d.connect(),a=prepareLinear(x.bytes,candidate,null,limits);await assert.rejects(d.programImage(x.bytes,a,'no'));let b=a.slice();b[80]=2;b[127]=crc8(b.slice(0,127));await assert.rejects(d.programImage(x.bytes,b,'PGA300 TESTCHIP PROGRAMMIEREN'));io.e[80]=2;await assert.rejects(d.programImage(x.bytes,a,'PGA300 TESTCHIP PROGRAMMIEREN'));assert.equal(io.writes,0)});
 test('page readback error aborts remaining writes',async()=>{const io=new Fake(),d=new PGA300(io),x=await d.connect(),a=prepareLinear(x.bytes,candidate,null,limits);io.corrupt=true;await assert.rejects(d.programImage(x.bytes,a,'PGA300 TESTCHIP PROGRAMMIEREN'));assert.equal(io.writes,1)});
 test('AFE write/readback',async()=>{const d=new PGA300(new Fake());await d.connect();const a=await d.setAFE({pGain:0x9f,tGain:2,bridge:1,temp:0x43,test:0});assert.equal(a.pGain,0x9f);assert.equal(a.bridge,1);await assert.rejects(d.setAFE({pGain:0x60}))});
+
+test('gain planning preserves headroom',()=>{const g=recommendGain(-1000,5000,0);assert.equal(g.gain,25);assert.equal(g.predictedPeak,25000);assert.throws(()=>recommendGain(0,32767,0))});
+test('output-only and alarm image preserves calibration words',()=>{const io=new Fake();const original=io.e.slice(),a=prepareSettings(original,{stage:2,ratiometric:1,normalLow:100,normalHigh:14000,lowClamp:50,highClamp:15000,diagEnabled:1,faultDAC:200,diagMask:0x33});assert.equal(a[33],2);assert.equal(a[32],1);assert.equal(a[68],1);assert.equal(a[50],1);assert.equal(a[127],crc8(a.slice(0,127)));assert.throws(()=>prepareSettings(original,{stage:8,ratiometric:1}));});
+test('RAM output and DAC test readback',async()=>{const d=new PGA300(new Fake());await d.connect();assert.equal((await d.setOutput({stage:2,ratiometric:1})).output,2);assert.equal(await d.testDAC(14745),14745);assert.equal(await d.read(2,0x67),1);await d.stopDAC();assert.equal(await d.read(2,0x67),0);});

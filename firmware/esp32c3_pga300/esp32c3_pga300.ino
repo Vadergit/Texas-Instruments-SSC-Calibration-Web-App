@@ -34,7 +34,7 @@ void activate(){
 void answer(unsigned long id,const char* status,const char* data=""){Serial.printf("%lu %s%s%s\n",id,status,*data?" ":"",data);}
 bool writeAllowed(unsigned p,unsigned a,unsigned v){
  if(p==0&&a==12)return v==0||v==3;
- if(p==2){switch(a){case 0x46:return !(v&~7);case 0x47:return !(v&~0x9f);case 0x48:return !(v&~0x83);case 0x4c:return !(v&~0x7f);case 0x67:return !(v&~9);}}
+ if(p==2){switch(a){case 0x30:return true;case 0x31:return v<64;case 0x39:return v<2;case 0x3b:return v<32;case 0x46:return !(v&~7);case 0x47:return !(v&~0x9f);case 0x48:return !(v&~0x83);case 0x4c:return !(v&~0x7f);case 0x67:return !(v&~9);}}
  if(p==5){if(a>=0x80&&a<=0x87)return true;if(a==0x88)return v<16;if(a==0x89)return v==4;if(a==0x8a)return v==1;}
  return false;
 }

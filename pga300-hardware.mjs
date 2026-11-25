@@ -41,6 +41,10 @@ export class PGA300{
  async sample(count=1){this.require();if(!Number.isInteger(count)||count<1||count>100)throw Error('1–100 Samples');let p=0,t=0,min=32767,max=-32768;for(let i=0;i<count;i++){const a=await this.word(0x20),b=await this.word(0x24);p+=a;t+=b;min=Math.min(min,a);max=Math.max(max,a)}return {p:Math.round(p/count),t:Math.round(t/count),min,max,diag:await this.read(2,0x5a),count}}
  async readAFE(){this.require();const o={};for(const [k,a] of Object.entries({bridge:0x46,pGain:0x47,tGain:0x48,temp:0x4c,dacConfig:0x39,output:0x3b,test:0x67}))o[k]=await this.read(2,a);return o}
  async setAFE({pGain,tGain,bridge,temp,test}){this.require();for(const [addr,value,mask] of [[0x47,pGain,0x9f],[0x48,tGain,0x83],[0x46,bridge,7],[0x4c,temp,0x7f],[0x67,test,9]]){if(value===undefined)continue;if(!Number.isInteger(value)||value<0||(value&mask)!==value)throw Error('Reservierte AFE-Bits');await this.write(2,addr,value);if(await this.read(2,addr)!==value)throw Error('AFE-Rücklesen fehlgeschlagen: '+hex(addr))}return this.readAFE()}
+ async writeChecked(page,addr,value){await this.write(page,addr,value);if(await this.read(page,addr)!==value)throw Error('Register-Readback falsch: '+hex(addr))}
+ async setOutput({stage,ratiometric}){this.require();if(![0,1].includes(ratiometric)||!Number.isInteger(stage)||stage<0||stage>31||((stage&8)?(stage&7)!==0||ratiometric!==0:![1,2,4,6].includes(stage&7)))throw Error('Ungültige Ausgangskonfiguration.');const test=await this.read(2,0x67);await this.writeChecked(2,0x67,test&8);await this.writeChecked(2,0x3b,stage);await this.writeChecked(2,0x39,ratiometric);return this.readAFE()}
+ async testDAC(code){this.require();if(!Number.isInteger(code)||code<0||code>16383)throw Error('14-bit DAC Code erforderlich.');const test=await this.read(2,0x67);await this.writeChecked(2,0x67,test&8);await this.writeChecked(2,0x30,code&255);await this.writeChecked(2,0x31,code>>8);await this.writeChecked(2,0x67,(test&8)|1);return code}
+ async stopDAC(){this.require();await this.writeChecked(2,0x67,(await this.read(2,0x67))&8)}
  async waitIdle(addr,mask){for(let i=0;i<100;i++){if(!((await this.read(5,addr))&mask))return;await delay(10)}throw Error('EEPROM Busy Timeout')}
  async programImage(original,desired,confirmation,progress=()=>{}){
   this.require();if(confirmation!=='PGA300 TESTCHIP PROGRAMMIEREN')throw Error('Explizite Freigabe fehlt.');
@@ -65,5 +69,19 @@ export function prepareLinear(original,candidate,afe,limits){
  if(afe){a[34]=(a[34]&~6)|(afe.bridge&6);a[35]=(a[35]&~159)|(afe.pGain&159);a[36]=(a[36]&~131)|(afe.tGain&131);a[37]=(a[37]&~127)|(afe.temp&127);a[40]=(a[40]&~1)|((afe.test>>3)&1)}
  const vals=[limits.clow,limits.low,limits.high,limits.chigh];if(vals.some(x=>!Number.isInteger(x)||x<0||x>16383)||vals.some((x,i)=>i&&x<vals[i-1])||limits.low===limits.high)throw Error('DAC-Grenzen ungültig');
  for(const [i,v] of [[42,limits.low],[44,limits.high],[46,limits.clow],[48,limits.chigh]]){a[i]=v&255;a[i+1]=(a[i+1]&192)|(v>>8)}
+ a[127]=crc8(a.slice(0,127));return a
+}
+
+export function recommendGain(low,high,currentCode,target=25000){
+ if(![low,high,target].every(Number.isFinite)||!Number.isInteger(currentCode)||currentCode<0||currentCode>31||Math.max(Math.abs(low),Math.abs(high))>=32760||target<=0||target>30000||low===high)throw Error('Gültige ungesättigte Endpunktmessungen erforderlich.');
+ const peak=Math.max(Math.abs(low),Math.abs(high));const current=PGA_GAINS[currentCode],limit=target*current/peak;
+ const code=PGA_GAINS.reduce((best,g,i)=>g<=limit?i:best,-1);if(code<0)throw Error('Auch kleinster P Gain überschreitet Zielreserve.');return {code,gain:PGA_GAINS[code],predictedPeak:peak*PGA_GAINS[code]/current,invert:high<low};
+}
+export function prepareSettings(original,{stage,ratiometric,normalLow,normalHigh,lowClamp,highClamp,diagEnabled,faultDAC,diagMask}){
+ if(original.length!==128)throw Error('Original-EEPROM erforderlich.');const a=Uint8Array.from(original);
+ const set=(i,v,m)=>{if(!Number.isInteger(v)||v<0||(v&m)!==v)throw Error('Ungültiger Registerwert '+hex(i));a[i]=(a[i]&~m)|v};
+ if(stage!==undefined){if(!Number.isInteger(stage)||stage<0||stage>31||![0,1].includes(ratiometric)||((stage&8)?(stage&7)!==0||ratiometric!==0:![1,2,4,6].includes(stage&7)))throw Error('Ausgangskonfiguration ungültig.');set(33,stage,31);set(32,ratiometric,1);
+ const values=[lowClamp,normalLow,normalHigh,highClamp];if(values.some(x=>!Number.isInteger(x)||x<0||x>16383)||values.some((x,i)=>i&&x<values[i-1])||normalLow===normalHigh)throw Error('DAC-Grenzen ungültig.');for(const [i,v] of [[42,normalLow],[44,normalHigh],[46,lowClamp],[48,highClamp]]){set(i,v&255,255);set(i+1,v>>8,63)}}
+ if(diagEnabled!==undefined){set(68,diagEnabled,1);if(!Number.isInteger(faultDAC)||faultDAC<0||faultDAC>16383)throw Error('Fault-DAC ungültig.');set(74,faultDAC&255,255);set(75,faultDAC>>8,63);set(71,diagMask,247)}
  a[127]=crc8(a.slice(0,127));return a
 }
