@@ -24,19 +24,19 @@ export class SerialBridge{
   try{
    timer=setTimeout(()=>{this.closed=true;reader.cancel().catch(()=>{})},2500);
    for(;;){let ix;while((ix=this.buffer.indexOf('\n'))>=0){const line=this.buffer.slice(0,ix).trim();this.buffer=this.buffer.slice(ix+1);const m=line.match(/^(\d+) (OK|ERR)(?: (.*))?$/);if(m&&+m[1]===id){if(m[2]==='ERR')throw Error(m[3]||'Bridge-Fehler');return m[3]||''}}
-    const {value,done}=await reader.read();if(done)throw Error('USB-Timeout / Verbindung beendet. Neu verbinden.');this.buffer+=dec.decode(value,{stream:true});if(this.buffer.length>4096){this.closed=true;throw Error('Ungültiger USB-Datenstrom.')}
+    const {value,done}=await reader.read();if(done){this.closed=true;throw Error('USB-Timeout / Verbindung beendet. Neu verbinden.');}this.buffer+=dec.decode(value,{stream:true});if(this.buffer.length>4096){this.closed=true;throw Error('Ungültiger USB-Datenstrom.')}
    }
   }finally{clearTimeout(timer);reader.releaseLock();this.reader=null}
  }
 }
 export class PGA300{
- constructor(transport){this.io=transport;this.active=false;this.backup=null;this.chipCRC=null}
- async read(page,addr){const v=await this.io.request('R '+hex(page)+' '+hex(addr));if(!/^[0-9A-Fa-f]{2}$/.test(v))throw Error('Ungültige Registerantwort');return parseInt(v,16)}
- async write(page,addr,value){if(![page,addr,value].every(Number.isInteger)||value<0||value>255)throw Error('Ungültiger Registerwert');await this.io.request('W '+hex(page)+' '+hex(addr)+' '+hex(value))}
- async connect(){if(await this.io.request('HELLO')!=='PGA300-BRIDGE 1')throw Error('Falsche Adapterfirmware');await this.io.request('ACT');await this.write(0,12,3);if(await this.read(0,12)!==3)throw Error('Keine bestätigte Konfigurationsantwort');this.active=true;return this.readEEPROM()}
- async exit(){if(this.active){await this.write(0,12,0);this.active=false}this.backup=null}
+ constructor(transport){this.io=transport;this.active=false;this.backup=null;this.chipCRC=null;this.writeFault=false}
+ async read(page,addr){if(![0,2,5].includes(page)||!Number.isInteger(addr)||addr<0||addr>255)throw Error('Registeradresse ungültig');const v=await this.io.request('R '+hex(page)+' '+hex(addr));if(!/^[0-9A-Fa-f]{2}$/.test(v))throw Error('Ungültige Registerantwort');return parseInt(v,16)}
+ async write(page,addr,value){if(![0,2,5].includes(page)||!Number.isInteger(addr)||addr<0||addr>255||!Number.isInteger(value)||value<0||value>255)throw Error('Ungültiger Registerwert');await this.io.request('W '+hex(page)+' '+hex(addr)+' '+hex(value))}
+ async connect(){const hello=await this.io.request('HELLO');if(hello!=='PGA300-BRIDGE 2 9600')throw Error('PGA300 Bridge v2 (9600 Baud OWI) erforderlich. Alte Firmware aktualisieren.');await this.io.request('ACT');try{await this.write(0,12,3);this.active=true;if(await this.read(0,12)!==3)throw Error('Keine bestätigte Konfigurationsantwort');return await this.readEEPROM()}catch(e){try{await this.exit()}catch{}this.active=false;this.backup=null;throw e}}
+ async exit(){try{if(this.active){await this.write(0,12,0)}}finally{this.active=false;this.backup=null;this.chipCRC=null}}
  require(){if(!this.active)throw Error('Sensor nicht im Konfigurationsmodus')}
- async readEEPROM(){this.require();const b=[];for(let i=0;i<128;i++)b.push(await this.read(5,i));const mode=await this.read(0,12);if(mode!==3)throw Error('Konfigurationsmodus verloren');this.backup=Uint8Array.from(b);const status=await this.read(5,0x8c),calculated=await this.read(5,0x8d);this.chipCRC={good:!!(status&2),busy:!!(status&1),calculated};return {bytes:this.backup.slice(),decoded:decodeEEPROM(this.backup),chipCRC:this.chipCRC}}
+ async readEEPROM(){this.require();this.backup=null;this.chipCRC=null;await this.waitIdle(0x8b,7);const b=[];for(let i=0;i<128;i++)b.push(await this.read(5,i));const mode=await this.read(0,12);if(mode!==3)throw Error('Konfigurationsmodus verloren');await this.waitIdle(0x8c,1);await this.write(5,0x8a,1);await this.waitIdle(0x8c,1);const status=await this.read(5,0x8c),calculated=await this.read(5,0x8d);const bytes=Uint8Array.from(b);if(status&1||calculated!==crc8(bytes.slice(0,127)))throw Error('EEPROM-Übertragungsfehler: Host- und Chip-CRC weichen ab.');this.backup=bytes;this.chipCRC={good:!!(status&2)&&calculated===bytes[127],busy:false,calculated};return {bytes:bytes.slice(),decoded:decodeEEPROM(bytes),chipCRC:this.chipCRC}}
  async word(lo){for(let i=0;i<5;i++){const h1=await this.read(2,lo+1),l=await this.read(2,lo),h2=await this.read(2,lo+1);if(h1===h2)return signed(l,h1)}throw Error('ADC-Wert instabil')}
  async sample(count=1){this.require();if(!Number.isInteger(count)||count<1||count>100)throw Error('1–100 Samples');let p=0,t=0,min=32767,max=-32768;for(let i=0;i<count;i++){const a=await this.word(0x20),b=await this.word(0x24);p+=a;t+=b;min=Math.min(min,a);max=Math.max(max,a)}return {p:Math.round(p/count),t:Math.round(t/count),min,max,diag:await this.read(2,0x5a),count}}
  async readAFE(){this.require();const o={};for(const [k,a] of Object.entries({bridge:0x46,pGain:0x47,tGain:0x48,temp:0x4c,dacConfig:0x39,output:0x3b,test:0x67}))o[k]=await this.read(2,a);return o}
@@ -47,7 +47,7 @@ export class PGA300{
  async stopDAC(){this.require();await this.writeChecked(2,0x67,(await this.read(2,0x67))&8)}
  async waitIdle(addr,mask){for(let i=0;i<100;i++){if(!((await this.read(5,addr))&mask))return;await delay(10)}throw Error('EEPROM Busy Timeout')}
  async programImage(original,desired,confirmation,progress=()=>{}){
-  this.require();if(confirmation!=='PGA300 TESTCHIP PROGRAMMIEREN')throw Error('Explizite Freigabe fehlt.');
+  this.require();if(this.writeFault)throw Error('Vorheriger Schreibfehler. Kein weiterer Schreibvorgang in dieser Sitzung.');if(confirmation!=='PGA300 TESTCHIP PROGRAMMIEREN')throw Error('Explizite Freigabe fehlt.');
   if(original.length!==128||desired.length!==128||original[69]&1)throw Error('EEPROM gesperrt / ungültig.');
   const allowed=new Set([...Object.values(COEFF).flatMap(a=>[a,a+1]),32,33,34,35,36,37,40,42,43,44,45,46,47,48,49,50,51,52,53,68,70,71,74,75,76,77,78,79,127]);
   for(let i=0;i<128;i++)if(original[i]!==desired[i]&&!allowed.has(i))throw Error('Geschütztes Byte '+hex(i));
@@ -57,12 +57,12 @@ export class PGA300{
   const fresh=await this.readEEPROM();if(!equal(fresh.bytes,original))throw Error('Sensorinhalt seit Backup geändert.');
   if(fresh.chipCRC.busy||fresh.chipCRC.calculated!==crc8(original.slice(0,127)))throw Error('Host-/Chip-CRC nicht übereinstimmend.');
   const pages=Array.from({length:16},(_,i)=>i).filter(i=>!equal(original.slice(i*8,i*8+8),desired.slice(i*8,i*8+8)));
-  for(const page of pages){progress('Programmiere Seite '+page);await this.waitIdle(0x8b,7);await this.write(5,0x88,page);if(await this.read(5,0x88)!==page)throw Error('Seitenauswahl falsch');for(let j=0;j<8;j++)await this.write(5,0x80+j,desired[page*8+j]);for(let j=0;j<8;j++)if(await this.read(5,0x80+j)!==desired[page*8+j])throw Error('Cache-Readback falsch');await this.write(5,0x89,4);await delay(20);await this.waitIdle(0x8b,7);for(let j=0;j<8;j++)if(await this.read(5,page*8+j)!==desired[page*8+j])throw Error('EEPROM-Readback falsch; nicht weiterprogrammieren');}
-  await this.write(5,0x8a,1);await this.waitIdle(0x8c,1);const result=await this.readEEPROM();if(!equal(result.bytes,desired)||!result.chipCRC.good||result.chipCRC.calculated!==desired[127])throw Error('Abschlussprüfung fehlgeschlagen.');return result
+  try{for(const page of pages){progress('Programmiere Seite '+page);await this.waitIdle(0x8b,7);await this.write(5,0x88,page);if(await this.read(5,0x88)!==page)throw Error('Seitenauswahl falsch');for(let j=0;j<8;j++)await this.write(5,0x80+j,desired[page*8+j]);for(let j=0;j<8;j++)if(await this.read(5,0x80+j)!==desired[page*8+j])throw Error('Cache-Readback falsch');await this.write(5,0x89,4);await delay(20);await this.waitIdle(0x8b,7);for(let j=0;j<8;j++)if(await this.read(5,page*8+j)!==desired[page*8+j])throw Error('EEPROM-Readback falsch; nicht weiterprogrammieren');}
+  await this.write(5,0x8a,1);await this.waitIdle(0x8c,1);const result=await this.readEEPROM();if(!equal(result.bytes,desired)||!result.chipCRC.good||result.chipCRC.calculated!==desired[127])throw Error('Abschlussprüfung fehlgeschlagen.');return result}catch(e){this.writeFault=true;this.backup=null;throw Error('EEPROM-Schreibvorgang gestoppt: '+e.message+' · Originalbackup behalten, keine automatische Wiederholung.')}
  }
 }
 export function prepareLinear(original,candidate,afe,limits){
- if(!candidate?.representable||original.length!==128)throw Error('Nur linearer Fit mit darstellbaren Koeffizienten.');
+ if(!candidate?.representable||![candidate.h0,candidate.g0].every(v=>Number.isInteger(v)&&v>=-32768&&v<=32767)||original.length!==128)throw Error('Nur linearer Fit mit darstellbaren Koeffizienten.');
  const a=Uint8Array.from(original),word=(i,v)=>{a[i]=v&255;a[i+1]=(v>>8)&255};
  for(const [k,i] of Object.entries(COEFF))word(i,k==='h0'?candidate.h0:k==='g0'?candidate.g0:0);
  word(50,1);word(52,0);

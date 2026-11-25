@@ -4,14 +4,15 @@
  * GPIO4 UART TX -> external voltage modulator (high idle).
  * GPIO5 UART RX <- external current decoder (3.3 V logic, idle high, no TX echo).
  * GPIO6 ACT -> external activation overvoltage switch (active high).
- * USB CDC at boot enabled; UART1 at experimental 38,400 baud (validate scope).
+ * USB CDC at boot enabled; UART1 at experimental 9,600 baud (validate scope).
  */
 #include <Arduino.h>
 HardwareSerial owi(1);
 constexpr int TX=4,RX=5,ACT=6;
-constexpr uint32_t RATE=38400;
+constexpr uint32_t RATE=9600;
 bool activated=false;
 String line;
+bool discardLine=false;
 void frame(const uint8_t* p,size_t n){owi.write((uint8_t)0x55);owi.write(p,n);owi.flush();}
 bool readReg(uint8_t page,uint8_t addr,uint8_t &v){
  while(owi.available())owi.read();
@@ -21,7 +22,7 @@ bool readReg(uint8_t page,uint8_t addr,uint8_t &v){
  uint8_t response=0x73;frame(&response,1);
  uint32_t start=micros();while(!owi.available()&&(uint32_t)(micros()-start)<10000)delayMicroseconds(10);
  if(!owi.available())return false;v=owi.read();
- delayMicroseconds(400);if(owi.available()){while(owi.available())owi.read();return false;}return true;
+ delayMicroseconds(1200);if(owi.available()){while(owi.available())owi.read();return false;}return true;
 }
 void writeReg(uint8_t page,uint8_t addr,uint8_t v){uint8_t b[]={uint8_t((page<<4)|1),addr,v};frame(b,3);delayMicroseconds(150);}
 void activate(){
@@ -41,7 +42,7 @@ bool writeAllowed(unsigned p,unsigned a,unsigned v){
 void handle(String s){
  unsigned long id=0;char cmd[12]={0};unsigned p=0,a=0,v=0;int n=sscanf(s.c_str(),"%lu %11s %x %x %x",&id,cmd,&p,&a,&v);
  if(n<2)return;
- if(!strcmp(cmd,"HELLO")&&n==2){answer(id,"OK","PGA300-BRIDGE 1");return;}
+ if(!strcmp(cmd,"HELLO")&&n==2){answer(id,"OK","PGA300-BRIDGE 2 9600");return;}
  if(!strcmp(cmd,"ACT")&&n==2){activate();answer(id,"OK");return;}
  if(!activated){answer(id,"ERR","ACT_REQUIRED");return;}
  if((p!=0&&p!=2&&p!=5)||a>255||v>255){answer(id,"ERR","RANGE");return;}
@@ -50,4 +51,4 @@ void handle(String s){
  answer(id,"ERR","COMMAND_OR_WRITE_NOT_ALLOWED");
 }
 void setup(){pinMode(ACT,OUTPUT);digitalWrite(ACT,LOW);Serial.begin(115200);owi.begin(RATE,SERIAL_8N1,RX,TX);}
-void loop(){while(Serial.available()){char c=Serial.read();if(c=='\n'){handle(line);line="";}else if(c!='\r'){if(line.length()<120)line+=c;else line="";}}}
+void loop(){while(Serial.available()){char c=Serial.read();if(c=='\n'){if(!discardLine)handle(line);line="";discardLine=false;}else if(c!='\r'){if(!discardLine){if(line.length()<120)line+=c;else{line="";discardLine=true;}}}}}

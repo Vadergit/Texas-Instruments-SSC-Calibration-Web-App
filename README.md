@@ -50,3 +50,6 @@ Web Serial + ESP32-C3 OWI-Firmware, 128-Byte-EEPROM-Dump und CRC, AFE-RAM-Rückl
 
 ### v0.3.1
 Zusätzlich Gain-Empfehlung, RAM-Ausgangsparameter, DAC-Test, separate Ausgang-/Diagnose-EEPROM-Patches und Intervall-Logging. 9 Hardware-Transporttests + 6 Rechentests in einer JavaScript-Laufzeit erfolgreich. Kein echter Hardware-, Firmware-Build- oder Browser-End-to-End-Test. Siehe aktuelle [OWI-Dokumentation](docs/PGA300-OWI.md); ältere Offline-Beschreibungen dokumentieren den ursprünglichen Stand.
+
+### v0.3.2
+OWI corrected from 38400 to 9600 baud per TI §5.18. Bridge v2 required. Fresh CRC validation, stale backup invalidation, write-failure latch, real capture provenance, module cache versioning. 12 mock driver tests pass in JS runtime. No real hardware or firmware build yet.

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {PGA300,crc8,decodeEEPROM,prepareLinear,prepareSettings,recommendGain,signed} from '../pga300-hardware.mjs';
 class Fake {
  constructor(){this.e=new Uint8Array(128);this.e[50]=1;this.e[76]=1;this.e[127]=crc8(this.e.slice(0,127));this.cache=new Uint8Array(8);this.mode=0;this.page=0;this.regs=new Map();this.writes=0;this.corrupt=false}
- async request(s){const [cmd,...arg]=s.split(' '),[p,a,v]=arg.map(x=>parseInt(x,16));if(cmd==='HELLO')return 'PGA300-BRIDGE 1';if(cmd==='ACT')return '';let x=0;
+ async request(s){const [cmd,...arg]=s.split(' '),[p,a,v]=arg.map(x=>parseInt(x,16));if(cmd==='HELLO')return 'PGA300-BRIDGE 2 9600';if(cmd==='ACT')return '';let x=0;
  if(cmd==='R'){if(p===0)x=this.mode;else if(p===2)x=this.regs.get(a)||0;else if(p===5){if(a<128)x=this.e[a];else if(a<136)x=this.cache[a-128];else if(a===136)x=this.page;else if(a===140)x=this.e[127]===crc8(this.e.slice(0,127))?2:0;else if(a===141)x=crc8(this.e.slice(0,127))}return x.toString(16).padStart(2,'0')}
  if(cmd==='W'){if(p===0)this.mode=v;else if(p===2)this.regs.set(a,v);else if(p===5){if(a>=128&&a<136)this.cache[a-128]=v;else if(a===136)this.page=v;else if(a===137){this.writes++;this.e.set(this.cache,this.page*8);if(this.corrupt)this.e[this.page*8]^=1}}return ''}throw Error('unknown command')}
 }
@@ -18,3 +18,7 @@ test('AFE write/readback',async()=>{const d=new PGA300(new Fake());await d.conne
 test('gain planning preserves headroom',()=>{const g=recommendGain(-1000,5000,0);assert.equal(g.gain,25);assert.equal(g.predictedPeak,25000);assert.throws(()=>recommendGain(0,32767,0))});
 test('output-only and alarm image preserves calibration words',()=>{const io=new Fake();const original=io.e.slice(),a=prepareSettings(original,{stage:2,ratiometric:1,normalLow:100,normalHigh:14000,lowClamp:50,highClamp:15000,diagEnabled:1,faultDAC:200,diagMask:0x33});assert.equal(a[33],2);assert.equal(a[32],1);assert.equal(a[68],1);assert.equal(a[50],1);assert.equal(a[127],crc8(a.slice(0,127)));assert.throws(()=>prepareSettings(original,{stage:8,ratiometric:1}));});
 test('RAM output and DAC test readback',async()=>{const d=new PGA300(new Fake());await d.connect();assert.equal((await d.setOutput({stage:2,ratiometric:1})).output,2);assert.equal(await d.testDAC(14745),14745);assert.equal(await d.read(2,0x67),1);await d.stopDAC();assert.equal(await d.read(2,0x67),0);});
+
+test('reject old bridge firmware before activation',async()=>{let calls=[];const d=new PGA300({async request(s){calls.push(s);return 'PGA300-BRIDGE 1'}});await assert.rejects(d.connect());assert.equal(calls.length,1)});
+test('CRC mismatch invalidates backup',async()=>{const io=new Fake(),d=new PGA300(io);await d.connect();const base=io.request.bind(io);io.request=async s=>s==='R 05 8D'?'00':base(s);await assert.rejects(d.readEEPROM());assert.equal(d.backup,null)});
+test('failed page write locks subsequent attempts',async()=>{const io=new Fake(),d=new PGA300(io),x=await d.connect(),a=prepareLinear(x.bytes,candidate,null,limits);io.corrupt=true;await assert.rejects(d.programImage(x.bytes,a,'PGA300 TESTCHIP PROGRAMMIEREN'));assert.equal(d.writeFault,true);io.corrupt=false;await assert.rejects(d.programImage(x.bytes,a,'PGA300 TESTCHIP PROGRAMMIEREN'));assert.equal(io.writes,1)});
