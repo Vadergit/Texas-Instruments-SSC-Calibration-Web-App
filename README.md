@@ -56,3 +56,6 @@ OWI corrected from 38400 to 9600 baud per TI §5.18. Bridge v2 required. Fresh C
 
 ### v0.3.3
 ESP32-C3 and Arduino Pro Micro Web Serial programmer sketches plus experimental local Windows TI USB2ANY SDK transport. Three additional mocked adapter tests. Details: [PGA300-ADAPTERS](docs/PGA300-ADAPTERS.md). Hardware/SDK and firmware builds are not validated.
+
+### v0.4.0 – Labor-Testfreigabe (keine Produktionsfreigabe)
+Neue Q14-Kandidaten für alle 16 TC/NL-Terme, TI-Referenzvergleich (keine automatische Programmierfreigabe), gemessene DAC-Übertragungskennlinie, geschützte EEPROM-Wiederherstellung, Registertabelle, ADC-Trend und geführter Kaltstart-/Analogvergleich. EEPROM-Schreiben standardmässig gesperrt. 13 Transporttests, 7 Testtool-Tests, 6 Rechentests und 3 Adaptertests. Hardware und SDK weiterhin nicht verifiziert. Siehe [Testfreigabe](docs/TESTFREIGABE.md).
