@@ -4,11 +4,11 @@
 
 ## PGA300 – geführter Offline-Laborprototyp
 
-Standardansicht mit sechs Aufgabenkacheln, Seitenleiste, Fortschrittsanzeige und Hell-/Dunkelmodus nach dem Bedienkonzept der [ELMOS-Master-App](https://github.com/Vadergit/ELMOS-E703.11-Calibration-Web-App). PGA302, PGA305 und PGA309 behalten ihre bisherige lineare Simulation.
+Version 0.2.0: acht Aufgabenkacheln, originaler Header und kopierte Stylesheets (`master-*.css`) aus ELMOS v0.7.173, Seitenleiste, Fortschrittsanzeige und Hell-/Dunkelmodus nach dem Bedienkonzept der [ELMOS-Master-App](https://github.com/Vadergit/ELMOS-E703.11-Calibration-Web-App). PGA302, PGA305 und PGA309 behalten ihre bisherige lineare Simulation.
 
 ### Ablauf
 1. Erfassungsmodus und Sensor definieren. Manuelle Eingabe oder klar markierte synthetische Daten.
-2. Messkonzept: 2P1T, 2P3T, 3P3T, 4P4T oder individuelle Matrix (2–5 P, 1–4 T, Ordnung P 1–3, T 0–3).
+2. Messkonzept: 2P1T, TK0 (3 Punkte), TK0+TKE (4 Punkte), 2P3T, 4P4T oder individuelle Matrix (2–5 P, 1–4 T, Ordnung P 1–3, T 0–3).
 3. Druckbereich (Standard 0–100 %), physische Temperaturstufen und DAC-Zielcodes bestimmen.
 4. AFE am externen Messaufbau einstellen und konstant halten. Einstellungen dokumentieren und bestätigen.
 5. PADC/TADC als vorzeichenbehaftete 16-bit Codes eingeben; Modell berechnen.
@@ -22,7 +22,7 @@ TI SLDS204D §6.3.11.2, Gl. 4: Tensorpolynom mit maximal 16 Termen. Die App nutz
 ### Bewusste Grenzen
 - Kein validierter OWI-Adapter, keine Chipidentifikation, keine Live-ADC-Abfrage oder AFE-Schreibfunktion.
 - Keine automatische Umrechnung physischer Spannung/Strom in DAC-Codes, keine vollständige TC/NL-Festkomma-Quantisierung, kein EEPROM-Image, keine CRC- oder Schreibfreigabe.
-- Kein kontinuierliches Hardwarelogging oder dauerhaftes Archiv; Berichte werden lokal heruntergeladen.
+- Manuelles Logging, Brückenrechner für externe mV/V-Messungen, Binär-Viewer und lokales Browserarchiv verfügbar. Kein kontinuierliches Hardwarelogging, keine EEPROM-Rückrechnung und kein Dateisystem-Archiv wie beim Master.
 - Vor realer Programmierung sind TI-Referenzrechner, Hardwarevergleich, vollständige EEPROM-Sicherung, reservierte Bits, CRC, Rücklesen und Kaltstart zu validieren.
 - Kein Produktionsfreigabestatus. Ein USB-UART ist nicht gleich einer OWI-Schnittstelle.
 
@@ -40,4 +40,4 @@ node --test tests/pga300.test.mjs
 ```
 Öffnen: http://127.0.0.1:8000/?model=pga300
 
-Für einen Offline-Bedientest: Simulation wählen, 4P4T wählen, AFE bestätigen, Simulationsdaten laden, berechnen, synthetischen Prüfpunkt laden und prüfen, Bericht exportieren. Anschliessend mit echten extern erfassten Daten wiederholen. Die fünf Rechen-Regressionen wurden zusätzlich in einer JavaScript-Laufzeit geprüft. Ein Browser-End-to-End-Test und Hardwaretests stehen aus.
+Für einen Offline-Bedientest: Simulation wählen, 4P4T wählen, AFE bestätigen, Simulationsdaten laden, berechnen, synthetischen Prüfpunkt laden und prüfen, Bericht exportieren. Anschliessend mit echten extern erfassten Daten wiederholen. Die sechs Rechen-Regressionen wurden zusätzlich in einer JavaScript-Laufzeit geprüft. Ein Browser-End-to-End-Test und Hardwaretests stehen aus.

@@ -7,3 +7,5 @@ test('recover cubic tensor model',()=>{const rows=matrix(spec).map((x,i)=>{const
 test('reject duplicate and incomplete',()=>{assert.throws(()=>solve([{p:1,t:2,target:0},{p:1,t:2,target:10}],1,0));assert.throws(()=>solve(matrix(spec),3,3))});
 test('TI linear example and independent verification',()=>{const rows=[{p:0,t:0,target:0},{p:30000,t:0,target:15000}];const f=solve(rows,1,0);assert.equal(linearCandidate(f).g0,8192);assert.equal(linearCandidate(f).h0,0);assert.equal(verify(f,rows,[{p:10000,t:0,target:5000}],1).pass,true);assert.equal(verify(f,rows,[{p:10000,t:0,target:5100}],1).pass,false);assert.throws(()=>verify(f,rows,[rows[0]],1));assert.equal(verify(f,rows,[{p:-1,t:0,target:0}],1).pass,false)});
 test('invalid ranges',()=>assert.throws(()=>matrix({...spec,dacHigh:16384})));
+
+test('TK0-only three-point model',()=>{const rows=matrix({...spec,pCount:2,temperatures:[25,75],thermalFit:'tk0'}).map((x,i)=>({...x,p:i===1?2000:1000,t:i===2?2000:1000,target:1000+(i===1?2000:0)+(i===2?50:0)}));assert.equal(rows.length,3);const f=solve(rows,1,1,'tk0');assert.ok(Math.abs(predict(f,2000,2000)-3050)<1e-7);assert.equal(f.coefficients[3],0);});

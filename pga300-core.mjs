@@ -1,9 +1,10 @@
 // PGA300 floating-point planning model, TI SLDS204D eq. 4.
 // Normalized ADC inputs are NOT the chip's fixed-point register representation.
-export const presets={quick:[2,1],temperature:[2,3],nonlinear:[3,3],full:[4,4]};
-export function matrix({min,max,pCount,temperatures,dacLow,dacHigh}){
+export const presets={quick:[2,1],tk0:[2,2],tke:[2,2],temperature:[2,3],custom:[3,2],nonlinear:[3,3],full:[4,4]};
+export function matrix({min,max,pCount,temperatures,dacLow,dacHigh,thermalFit="full"}){
  if(![min,max,dacLow,dacHigh].every(Number.isFinite)||max<=min||dacLow<0||dacHigh>16383||dacHigh<=dacLow||!Number.isInteger(pCount)||pCount<2||pCount>5||!Array.isArray(temperatures)||temperatures.length<1||temperatures.length>4||temperatures.some((t,i)=>!Number.isFinite(t)||t< -40||t>150||(i>0&&t<=temperatures[i-1])))throw Error('Ungültiger Druck-, Temperatur- oder DAC-Bereich.');
- return temperatures.flatMap((temperature,j)=>Array.from({length:pCount},(_,i)=>({id:j+'-'+i,temperature,pressure:min+(max-min)*i/(pCount-1),target:dacLow+(dacHigh-dacLow)*i/(pCount-1),p:null,t:null})));
+ if(thermalFit!=="full"&&(thermalFit!=="tk0"||pCount!==2||temperatures.length!==2))throw Error("TK0 benötigt 2 Druckpunkte und 2 Temperaturstufen.");
+ return temperatures.flatMap((temperature,j)=>Array.from({length:pCount},(_,i)=>({id:j+'-'+i,temperature,pressure:min+(max-min)*i/(pCount-1),target:dacLow+(dacHigh-dacLow)*i/(pCount-1),p:null,t:null}))).filter(x=>thermalFit!=="tk0"||x.id!=="1-1");
 }
 export function validADC(v){return Number.isInteger(v)&&v>=-32768&&v<=32767}
 const finite=Number.isFinite;
@@ -14,12 +15,13 @@ export function predict(model,p,t){
  const b=basis((p-model.ps.center)/model.ps.span,(t-model.ts.center)/model.ts.span,model.po,model.to);
  return b.reduce((s,v,i)=>s+v*model.coefficients[i],0)
 }
-export function solve(points,po,to){
+export function solve(points,po,to,thermalFit="full"){
  if(!Number.isInteger(po)||po<1||po>3||!Number.isInteger(to)||to<0||to>3)throw Error('Ungültige Polynomordnung.');
- const n=(po+1)*(to+1);
+ if(thermalFit!=="full"&&(thermalFit!=="tk0"||po!==1||to!==1))throw Error("TK0 benötigt lineare Druck- und Temperaturordnung.");
+ const total=(po+1)*(to+1),active=Array.from({length:total},(_,i)=>i).filter(i=>thermalFit!=="tk0"||i!==3),n=active.length;
  if(points.length<n||points.some(x=>!validADC(x.p)||!validADC(x.t)||!finite(x.target)||x.target<0||x.target>16383))throw Error('Alle Messpunkte vollständig und gültig erfassen.');
  const ps=scale(points.map(x=>x.p),true),ts=scale(points.map(x=>x.t),to>0);
- const A=points.map(x=>basis((x.p-ps.center)/ps.span,(x.t-ts.center)/ts.span,po,to));
+ const A=points.map(x=>basis((x.p-ps.center)/ps.span,(x.t-ts.center)/ts.span,po,to).filter((_,i)=>active.includes(i)));
  // Modified Gram-Schmidt with reorthogonalization, no normal equations.
  const Q=[],R=Array.from({length:n},()=>Array(n).fill(0)),dot=(a,b)=>a.reduce((s,x,i)=>s+x*b[i],0);
  for(let j=0;j<n;j++){
@@ -30,7 +32,8 @@ export function solve(points,po,to){
  }
  const y=points.map(x=>x.target),z=Q.map(q=>dot(q,y)),coefficients=Array(n).fill(0);
  for(let j=n-1;j>=0;j--)coefficients[j]=(z[j]-R[j].slice(j+1).reduce((s,x,k)=>s+x*coefficients[j+1+k],0))/R[j][j];
- const model={po,to,ps,ts,coefficients};
+ const full=Array(total).fill(0);active.forEach((k,i)=>full[k]=coefficients[i]);
+ const model={po,to,ps,ts,coefficients:full,thermalFit};
  const residuals=points.map(x=>predict(model,x.p,x.t)-x.target);
  if(![...coefficients,...residuals].every(finite))throw Error('Nicht endliches Rechenergebnis.');
  return {...model,residuals,maxError:Math.max(...residuals.map(Math.abs)),rms:Math.hypot(...residuals)/Math.sqrt(residuals.length)};
