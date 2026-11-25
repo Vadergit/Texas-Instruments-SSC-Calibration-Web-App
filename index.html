@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="de">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Texas Instruments · SSC-Kalibrierassistent</title>
+<link rel="stylesheet" href="./style.css">
+<header><div><a href="https://vadergit.github.io/SSC-Calibration-Studio/">SSC Calibration Studio</a><h1>Texas Instruments · Kalibrierassistent</h1><p>Simulationsmodus · Messwerte und Koeffizienten bleiben im Browser.</p></div></header>
+<main>
+<nav class="steps" aria-label="Kalibrierschritte">
+  <a href="#device">1 · Verbindung</a>
+  <a href="#afe">2 · AFE</a>
+  <a href="#measurement">3 · Messpunkte</a>
+  <a href="#verification">4 · Berechnung und Prüfung</a>
+  <a href="#programming">5 · Programmierung und Export</a>
+</nav>
+<section aria-labelledby="device"><h2 id="device">Verbindung und Bauteil</h2><div class="fields">
+<label>Adapter<input value="Simulation" readonly></label><label>SSC<select id="model"></select></label>
+</div><p id="modelStatus"></p></section>
+<section aria-labelledby="afe"><h2 id="afe">AFE vorbereiten</h2>
+<p>Die Simulation verwendet Rohwerte direkt. Gerätespezifische Einstellungen für Verstärkung und Offset werden mit dem jeweiligen Treiber ergänzt.</p></section>
+<section aria-labelledby="measurement"><h2 id="measurement">Messpunkte</h2>
+<p>Gib pro Messpunkt den Rohwert und den zugehörigen Referenzwert ein. Verwende für alle Referenzwerte dieselbe Einheit.</p>
+<form id="calibration">
+<div class="table"><table><thead><tr><th scope="col">Punkt</th><th scope="col">Rohwert</th><th scope="col">Referenz</th></tr></thead><tbody id="points"></tbody></table></div>
+<div class="actions"><button type="button" id="example">Beispieldaten laden</button><button type="button" id="add">Messpunkt hinzufügen</button><button type="button" id="remove">Letzten Punkt entfernen</button><button class="primary">Berechnen</button></div>
+</form></section>
+<section aria-labelledby="verification"><h2 id="verification">Ergebnis und Prüfung</h2>
+<p id="status" role="status">Berechne zuerst Gain und Offset.</p>
+<dl id="result" hidden><div><dt>Gain</dt><dd id="gain"></dd></div><div><dt>Offset</dt><dd id="offset"></dd></div><div><dt>Max. absoluter Punktfehler</dt><dd id="error"></dd></div></dl>
+<div id="check" hidden><label>Unabhängiger Prüfrohwert<input id="checkRaw" type="number" step="any"></label><p>Berechneter Referenzwert <output id="checkResult">—</output></p></div>
+</section>
+<section aria-labelledby="programming"><h2 id="programming">Programmierung und Export</h2>
+<p>RAM- und NVM-Programmierung sind in der Simulation gesperrt. Der JSON-Bericht enthält die Messpunkte und die berechneten Koeffizienten.</p>
+<button type="button" id="export" disabled>JSON-Bericht exportieren</button></section>
+</main>
+<script type="module" src="./app.mjs"></script>
+</html>
