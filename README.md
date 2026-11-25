@@ -59,3 +59,6 @@ ESP32-C3 and Arduino Pro Micro Web Serial programmer sketches plus experimental 
 
 ### v0.4.0 – Labor-Testfreigabe (keine Produktionsfreigabe)
 Neue Q14-Kandidaten für alle 16 TC/NL-Terme, TI-Referenzvergleich (keine automatische Programmierfreigabe), gemessene DAC-Übertragungskennlinie, geschützte EEPROM-Wiederherstellung, Registertabelle, ADC-Trend und geführter Kaltstart-/Analogvergleich. EEPROM-Schreiben standardmässig gesperrt. 13 Transporttests, 7 Testtool-Tests, 6 Rechentests und 3 Adaptertests. Hardware und SDK weiterhin nicht verifiziert. Siehe [Testfreigabe](docs/TESTFREIGABE.md).
+
+### v0.4.1
+Archivordner-Export (Sitzung), Berichtsvergleich, druckbarer Kalibrierbericht, bestätigte Gain-Übernahme. Browser smoke test (`tests/browser-smoke.mjs`) für fünf Presets, Archiv und Registerviewer. CI-Builds für ESP32-C3 und ATmega32U4 (Leonardo-Kompatibilitätsbuild; kein finaler 8-MHz-Pro-Micro-Build). CI-Ergebnis noch nicht verifiziert.
