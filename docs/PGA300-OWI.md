@@ -27,3 +27,5 @@ Die mathematischen Modelle bis zur dritten Ordnung sind implementiert. Die 16-Bi
 
 ## v0.3.2
 TI SLDS204D §5.18 specifies 600–9600 baud. Bridge v2 uses 9600; old bridge v1 is rejected before activation. USB stays 115200. Flash the updated sketch. EEPROM reading requests a fresh hardware CRC, rejects host/target mismatches, invalidates old backups on errors and locks further writes after a failed page operation in the same session. Physical validation remains mandatory.
+
+Adapter-Auswahl ab v0.3.3: siehe [PGA300-ADAPTERS.md](PGA300-ADAPTERS.md).

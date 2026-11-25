@@ -42,6 +42,7 @@ bool writeAllowed(unsigned p,unsigned a,unsigned v){
 void handle(String s){
  unsigned long id=0;char cmd[12]={0};unsigned p=0,a=0,v=0;int n=sscanf(s.c_str(),"%lu %11s %x %x %x",&id,cmd,&p,&a,&v);
  if(n<2)return;
+ if(!strcmp(cmd,"INFO")&&n==2){answer(id,"OK","ESP32-C3");return;}
  if(!strcmp(cmd,"HELLO")&&n==2){answer(id,"OK","PGA300-BRIDGE 2 9600");return;}
  if(!strcmp(cmd,"ACT")&&n==2){activate();answer(id,"OK");return;}
  if(!activated){answer(id,"ERR","ACT_REQUIRED");return;}
